@@ -194,7 +194,8 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
                             ServerProfile(
                                 name = phoneId,
                                 host = json.getString("host"),
-                                port = json.getInt("port")
+                                port = json.getInt("port"),
+                                imageQuality = 3
                             )
                         )
                     }
