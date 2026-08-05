@@ -1,194 +1,158 @@
+/*
+ * Copyright (c) 2020  Gaurav Ujjwal.
+ *
+ * SPDX-License-Identifier:  GPL-3.0-or-later
+ *
+ * See COPYING.txt for more details.
+ */
+
 package com.gaurav.avnc.viewmodel
 
 import android.app.Application
+import androidx.lifecycle.MediatorLiveData
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.switchMap
 import com.gaurav.avnc.model.ServerProfile
 import com.gaurav.avnc.util.LiveEvent
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
+import com.gaurav.avnc.viewmodel.service.Discovery
 
 class HomeViewModel(app: Application) : BaseViewModel(app) {
 
-    companion object {
-        const val API_BASE = "http://106.52.57.127:5000"
+    /**
+     * [ServerProfile]s stored in database.
+     * Depending on the user pref, this list may be sorted by server name.
+     */
+    val serverProfiles by lazy {
+        pref.ui.sortServerList.switchMap {
+            if (it) serverProfileDao.getSortedLiveList()
+            else serverProfileDao.getLiveList()
+        }
     }
 
-    var token: String = ""
-    var username: String = ""
-    var isAdmin: Boolean = false
-
     /**
-     * 设备列表（从服务器拉取）
+     * Used to find new servers.
      */
-    val deviceList = MutableLiveData<List<ServerProfile>>()
+    val discovery = Discovery
 
     /**
-     * 加载中状态
-     */
-    val isLoading = MutableLiveData(false)
-
-    /**
-     * 错误消息
-     */
-    val errorMessage = MutableLiveData<String>()
-
-    /**
-     * 用于启动 VNC 连接
+     * Used for starting new VNC connections.
      */
     val newConnectionEvent = LiveEvent<ServerProfile>()
 
-    // ===== 分组相关 =====
-    val groupList = MutableLiveData<List<JSONObject>>()
-    var groupsData = mutableListOf<JSONObject>()
-
-    val rawDeviceList = MutableLiveData<MutableList<JSONObject>>()
-    private var rawDevices = mutableListOf<JSONObject>()
+    /**
+     * This event is used for editing/creating server profiles.
+     * Home activity observes this event and starts profile editor when it is fired.
+     */
+    val editProfileEvent = LiveEvent<ServerProfile>()
 
     /**
-     * 从服务器拉取设备列表
+     * Fired when a profile is saved to database.
+     * Can be used to highlight the new profile in UI.
      */
-    fun fetchDevices() {
-        isLoading.value = true
-        viewModelScope.launch {
-            try {
-                val (devices, rawList) = withContext(Dispatchers.IO) {
-                    val url = if (isAdmin) {
-                        "$API_BASE/api/admin/vnc_devices"
-                    } else {
-                        "$API_BASE/api/client/devices"
-                    }
-
-                    val conn = URL(url).openConnection() as HttpURLConnection
-                    conn.requestMethod = if (isAdmin) "GET" else "POST"
-
-                    if (isAdmin) {
-                        conn.setRequestProperty("Authorization", "Bearer $token")
-                    } else {
-                        conn.setRequestProperty("Content-Type", "application/json")
-                        conn.doOutput = true
-                        val body = JSONObject().apply { put("phone", username) }
-                        conn.outputStream.write(body.toString().toByteArray())
-                    }
-
-                    val response = conn.inputStream.bufferedReader().readText()
-                    val json = JSONObject(response)
-
-                    val arr: JSONArray
-                    val success = json.optBoolean("success", false)
-                    if (success) {
-                        arr = if (isAdmin) json.getJSONArray("devices") else json.getJSONArray("devices")
-                    } else {
-                        throw Exception(json.optString("message", "获取设备列表失败"))
-                    }
-
-                    val list = mutableListOf<ServerProfile>()
-                    val raw = mutableListOf<JSONObject>()
-                    for (i in 0 until arr.length()) {
-                        val d = arr.getJSONObject(i)
-                        val phoneId = d.getString("phone_id")
-                        val codeId = d.optString("code_id", "")
-                        val expireTime = d.optString("expire_time", "-")
-
-                        list.add(ServerProfile(
-                            name = phoneId,
-                            host = "",
-                            port = 5900,
-                            password = "",
-                            useCount = 0
-                        ))
-                        raw.add(d)
-                    }
-                    Pair(list, raw)
-                }
-                deviceList.postValue(devices)
-                rawDevices = rawList
-                rawDeviceList.postValue(rawDevices)
-                fetchGroups()
-            } catch (e: Exception) {
-                errorMessage.postValue("加载失败: ${e.message}")
-            } finally {
-                isLoading.postValue(false)
-            }
-        }
-    }
+    val profileSavedEvent = LiveEvent<ServerProfile>()
 
     /**
-     * 拉取分组列表
+     * Fired when a profile is deleted from database.
+     * This is used for notifying the user and potentially undo the deletion.
      */
-    fun fetchGroups() {
-        if (isAdmin) {
-            groupList.postValue(emptyList())
-            return
-        }
-        viewModelScope.launch {
-            try {
-                val groups = withContext(Dispatchers.IO) {
-                    val conn = URL("$API_BASE/api/my/groups").openConnection() as HttpURLConnection
-                    conn.setRequestProperty("Authorization", "Bearer $token")
-                    val resp = conn.inputStream.bufferedReader().readText()
-                    val json = JSONObject(resp)
-                    if (json.getBoolean("success")) json.getJSONArray("groups") else JSONArray()
-                }
-                val list = mutableListOf<JSONObject>()
-                for (i in 0 until groups.length()) list.add(groups.getJSONObject(i))
-                groupsData = list
-                groupList.postValue(list)
-            } catch (_: Exception) {}
-        }
-    }
+    val profileDeletedEvent = LiveEvent<ServerProfile>()
 
     /**
-     * 验证设备并获取连接信息，然后启动连接
+     * Starts new connection to given profile.
      */
-    fun connectDevice(phoneId: String, codeId: String) {
-        isLoading.value = true
-        viewModelScope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    val url = "$API_BASE/api/validate"
-                    val conn = URL(url).openConnection() as HttpURLConnection
-                    conn.requestMethod = "POST"
-                    conn.setRequestProperty("Content-Type", "application/json")
-                    conn.doOutput = true
-
-                    val body = JSONObject().apply {
-                        put("phone_id", phoneId)
-                        put("code_id", codeId)
-                        put("user_ip", "")
-                    }
-                    conn.outputStream.write(body.toString().toByteArray())
-
-                    val response = conn.inputStream.bufferedReader().readText()
-                    JSONObject(response)
-                }
-
-                if (result.getBoolean("success")) {
-                    val host = result.getString("host")
-                    val port = result.getInt("port")
-
-                    val profile = ServerProfile(
-                        name = phoneId,
-                        host = host,
-                        port = port,
-                        password = ""
-                    )
-                    newConnectionEvent.fire(profile)
-                } else {
-                    errorMessage.postValue("验证失败: ${result.optString("message", "未知错误")}")
-                }
-            } catch (e: Exception) {
-                errorMessage.postValue("连接失败: ${e.message}")
-            } finally {
-                isLoading.postValue(false)
-            }
-        }
-    }
-
     fun startConnection(profile: ServerProfile) = newConnectionEvent.fire(profile)
+
+    fun maybeConnectOnAppStart() = launchMain {
+        serverProfileDao.getConnectableOnAppStart().firstOrNull()?.let { startConnection(it) }
+    }
+
+    /**************************************************************************
+     * Server Discovery
+     *
+     * To save battery, Discovery is stopped when HomeActivity is in background.
+     **************************************************************************/
+    private var autoStopped = false
+
+    fun startDiscovery() {
+        autoStopped = false
+        discovery.start(app)
+    }
+
+    fun stopDiscovery() {
+        autoStopped = false
+        discovery.stop()
+    }
+
+    fun autoStartDiscovery() {
+        if (pref.server.discoveryAutorun || autoStopped)
+            startDiscovery()
+    }
+
+    fun autoStopDiscovery() {
+        if (discovery.isRunning.value == true) {
+            stopDiscovery()
+            autoStopped = true
+        }
+    }
+
+
+    /**************************************************************************
+     * Profile editing/creating
+     *
+     * These are invoked from UI on user actions. We simply fire [editProfileEvent]
+     * with appropriate profile, causing the profile editor to be shown.
+     *
+     * NOTE: We need to make a copy of given profile because the instance
+     * given to [editProfileEvent] can be modified by the editor.
+     **************************************************************************/
+
+    fun onNewProfile() = editProfileEvent.fire(ServerProfile())
+    fun onNewProfile(source: ServerProfile) = editProfileEvent.fire(source.copy(ID = 0))
+    fun onEditProfile(profile: ServerProfile) = editProfileEvent.fire(profile.copy())
+
+    fun onDuplicateProfile(profile: ServerProfile) {
+        val duplicate = profile.copy(ID = 0)
+        duplicate.name += " (Copy)"
+        editProfileEvent.fire(duplicate)
+    }
+
+    /**************************************************************************
+     * Profile persistence
+     *
+     * These operations are asynchronous.
+     **************************************************************************/
+
+    fun saveProfile(profile: ServerProfile) = launchMain {
+        serverProfileDao.save(profile)
+        profileSavedEvent.fire(profile)
+    }
+
+    fun deleteProfile(profile: ServerProfile) = launchMain {
+        serverProfileDao.delete(profile)
+        profileDeletedEvent.fire(profile)
+    }
+
+    /**************************************************************************
+     * Rediscovery Indicator
+     *
+     * [rediscoveredProfiles] is the intersection of saved & discovered servers.
+     *
+     * To detect reachable server in [serverProfiles], we could directly 'ping'
+     * them, but that has its own issues.
+     **************************************************************************/
+    val rediscoveredProfiles by lazy {
+        pref.server.rediscoveryIndicator.switchMap {
+            if (it) prepareRediscoveredProfiles()
+            else MutableLiveData(null)
+        }
+    }
+
+    private fun prepareRediscoveredProfiles() = with(MediatorLiveData<List<ServerProfile>>()) {
+        val filter = { saved: List<ServerProfile>?, discovered: List<ServerProfile>? ->
+            saved?.filter { s -> discovered?.find { s.host == it.host && s.port == it.port } != null }
+        }
+        addSource(serverProfiles) { value = filter(it, discovery.servers.value) }
+        addSource(discovery.servers) { value = filter(serverProfiles.value, it) }
+        this
+    }
 }
