@@ -10,7 +10,6 @@ import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.gaurav.avnc.R
-import com.gaurav.avnc.ui.home.HomeActivity
 import com.gaurav.avnc.viewmodel.LoginViewModel
 
 class LoginActivity : AppCompatActivity() {
@@ -92,7 +91,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun startHome(token: String, username: String, isAdmin: Boolean) {
-        startActivity(Intent(this, HomeActivity::class.java).apply {
+        startActivity(Intent(this, MyDevicesActivity::class.java).apply {
             putExtra("token", token)
             putExtra("username", username)
             putExtra("is_admin", isAdmin)
