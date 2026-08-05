@@ -140,7 +140,7 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
                     myErrorMessage.postValue(json.optString("message", "获取失败"))
                 }
             } catch (e: Exception) {
-                myErrorMessage.postValue("加载失败: ${e.message}")
+                myErrorMessage.postValue("加载失败: ${e.message ?: "未知错误"}")
             } finally {
                 myIsLoading.postValue(false)
             }
