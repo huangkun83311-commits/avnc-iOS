@@ -54,31 +54,49 @@ class LoginActivity : AppCompatActivity() {
 
         viewModel.loginResult.observe(this) { result ->
             result.onSuccess { data ->
-                val token = data.getString("token")
-                val phone = data.optString("phone", "")
-                val isAdmin = phone.isEmpty()
-                val username = if (isAdmin) {
-                    data.getJSONObject("user").getString("username")
-                } else {
-                    phone
-                }
+                try {
+                    val success = data.optBoolean("success", false)
+                    if (!success) {
+                        Toast.makeText(this, data.optString("message", "登录失败"), Toast.LENGTH_LONG).show()
+                        return@onSuccess
+                    }
+                    val token = data.optString("token", "")
+                    if (token.isEmpty()) {
+                        Toast.makeText(this, "登录失败: 未获取到token", Toast.LENGTH_LONG).show()
+                        return@onSuccess
+                    }
+                    val phone = data.optString("phone", "")
+                    val isAdmin = phone.isEmpty()
+                    val username: String
+                    try {
+                        username = if (isAdmin) {
+                            data.getJSONObject("user").getString("username")
+                        } else {
+                            phone
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "解析用户信息失败: ${e.message}", Toast.LENGTH_LONG).show()
+                        return@onSuccess
+                    }
 
-                // 保存
-                prefs.edit().putString("token", token)
-                    .putString("username", username)
-                    .putBoolean("isAdmin", isAdmin)
-                    .putBoolean("remember", rememberCheck.isChecked)
-                    .apply()
-
-                if (rememberCheck.isChecked) {
-                    prefs.edit().putString("account", accountInput.text.toString().trim())
-                        .putString("password", passwordInput.text.toString())
+                    prefs.edit().putString("token", token)
+                        .putString("username", username)
+                        .putBoolean("isAdmin", isAdmin)
+                        .putBoolean("remember", rememberCheck.isChecked)
                         .apply()
-                } else {
-                    prefs.edit().remove("account").remove("password").apply()
-                }
 
-                startHome(token, username, isAdmin)
+                    if (rememberCheck.isChecked) {
+                        prefs.edit().putString("account", accountInput.text.toString().trim())
+                            .putString("password", passwordInput.text.toString())
+                            .apply()
+                    } else {
+                        prefs.edit().remove("account").remove("password").apply()
+                    }
+
+                    startHome(token, username, isAdmin)
+                } catch (e: Exception) {
+                    Toast.makeText(this, "处理数据异常: ${e.message}", Toast.LENGTH_LONG).show()
+                }
             }.onFailure { e ->
                 Toast.makeText(this, "登录失败: ${e.message}", Toast.LENGTH_LONG).show()
             }
