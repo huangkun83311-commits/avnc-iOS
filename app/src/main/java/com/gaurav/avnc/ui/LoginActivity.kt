@@ -2,27 +2,30 @@ package com.gaurav.avnc.ui
 
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Button
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.gaurav.avnc.R
-import com.gaurav.avnc.databinding.ActivityLoginBinding
 import com.gaurav.avnc.ui.home.HomeActivity
-import com.gaurav.avnc.util.EdgeToEdgeHelper
 import com.gaurav.avnc.viewmodel.LoginViewModel
 
 class LoginActivity : AppCompatActivity() {
 
-    private lateinit var binding: ActivityLoginBinding
     private val viewModel by viewModels<LoginViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = EdgeToEdgeHelper.setDataBindingContentView(this, R.layout.activity_login) as ActivityLoginBinding
+        setContentView(R.layout.activity_login)
 
-        binding.loginBtn.setOnClickListener {
-            val account = binding.accountInput.text.toString().trim()
-            val password = binding.passwordInput.text.toString()
+        val accountInput = findViewById<EditText>(R.id.account_input)
+        val passwordInput = findViewById<EditText>(R.id.password_input)
+        val loginBtn = findViewById<Button>(R.id.login_btn)
+
+        loginBtn.setOnClickListener {
+            val account = accountInput.text.toString().trim()
+            val password = passwordInput.text.toString()
             if (account.isEmpty() || password.isEmpty()) {
                 Toast.makeText(this, "请输入账号和密码", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -53,8 +56,8 @@ class LoginActivity : AppCompatActivity() {
         }
 
         viewModel.isLoading.observe(this) { isLoading ->
-            binding.loginBtn.isEnabled = !isLoading
-            binding.loginBtn.text = if (isLoading) "登录中..." else "登 录"
+            loginBtn.isEnabled = !isLoading
+            loginBtn.text = if (isLoading) "登录中..." else "登 录"
         }
     }
 }
