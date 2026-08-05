@@ -15,6 +15,11 @@ import androidx.lifecycle.switchMap
 import com.gaurav.avnc.model.ServerProfile
 import com.gaurav.avnc.util.LiveEvent
 import com.gaurav.avnc.viewmodel.service.Discovery
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 
 class HomeViewModel(app: Application) : BaseViewModel(app) {
 
@@ -113,12 +118,16 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
 
     fun fetchMyDevices() {
         myIsLoading.value = true
-        launchMain {
+        viewModelScope.launch(Dispatchers.IO) {
+            var conn: HttpURLConnection? = null
             try {
                 val url = if (isAdmin) "$API_BASE/api/admin/vnc_devices"
-                          else "$API_BASE/api/client/devices"
-                val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                else "$API_BASE/api/client/devices"
+                conn = URL(url).openConnection() as HttpURLConnection
                 conn.requestMethod = if (isAdmin) "GET" else "POST"
+                conn.connectTimeout = 10000
+                conn.readTimeout = 10000
+
                 if (isAdmin) {
                     conn.setRequestProperty("Authorization", "Bearer $token")
                 } else {
@@ -126,8 +135,14 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
                     conn.doOutput = true
                     conn.outputStream.write("{\"phone\":\"$username\"}".toByteArray())
                 }
-                val resp = conn.inputStream.bufferedReader().readText()
-                val json = org.json.JSONObject(resp)
+
+                val respText = if (conn.responseCode in 200..299) {
+                    conn.inputStream.bufferedReader().readText()
+                } else {
+                    conn.errorStream?.bufferedReader()?.readText() ?: ""
+                }
+
+                val json = JSONObject(respText)
                 if (json.optBoolean("success")) {
                     val arr = json.getJSONArray("devices")
                     val list = mutableListOf<ServerProfile>()
@@ -137,34 +152,59 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
                     }
                     myDeviceList.postValue(list)
                 } else {
-                    myErrorMessage.postValue(json.optString("message", "获取失败"))
+                    myErrorMessage.postValue(json.optString("message", "获取设备列表失败"))
                 }
             } catch (e: Exception) {
                 val msg = e.message ?: "无详情"
                 val stack = e.stackTraceToString()
-                myErrorMessage.postValue("错误: $msg\n详情: ${stack.take(200)}")
+                myErrorMessage.postValue("错误: $msg\n详情: ${stack.take(300)}")
             } finally {
+                conn?.disconnect()
                 myIsLoading.postValue(false)
             }
         }
     }
 
     fun connectMyDevice(phoneId: String) {
-        launchMain {
+        viewModelScope.launch(Dispatchers.IO) {
+            var conn: HttpURLConnection? = null
             try {
-                val conn = java.net.URL("$API_BASE/api/validate").openConnection() as java.net.HttpURLConnection
+                conn = URL("$API_BASE/api/validate").openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
+                conn.connectTimeout = 10000
+                conn.readTimeout = 10000
                 conn.doOutput = true
-                conn.outputStream.write("{\"phone_id\":\"$phoneId\",\"code_id\":\"\",\"user_ip\":\"\"}".toByteArray())
-                val json = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
-                if (json.getBoolean("success")) {
-                    newConnectionEvent.fire(ServerProfile(name = phoneId, host = json.getString("host"), port = json.getInt("port")))
+                val body = "{\"phone_id\":\"$phoneId\",\"code_id\":\"\",\"user_ip\":\"\"}"
+                conn.outputStream.write(body.toByteArray())
+
+                val respText = if (conn.responseCode in 200..299) {
+                    conn.inputStream.bufferedReader().readText()
                 } else {
-                    myErrorMessage.postValue(json.optString("message", "验证失败"))
+                    conn.errorStream?.bufferedReader()?.readText() ?: ""
+                }
+
+                val json = JSONObject(respText)
+                if (json.getBoolean("success")) {
+                    // LiveEvent.fire 必须主线程
+                    viewModelScope.launch(Dispatchers.Main) {
+                        newConnectionEvent.fire(
+                            ServerProfile(
+                                name = phoneId,
+                                host = json.getString("host"),
+                                port = json.getInt("port")
+                            )
+                        )
+                    }
+                } else {
+                    myErrorMessage.postValue(json.optString("message", "验证设备失败"))
                 }
             } catch (e: Exception) {
-                myErrorMessage.postValue("连接失败: ${e.message}")
+                val msg = e.message ?: "连接异常"
+                val stack = e.stackTraceToString()
+                myErrorMessage.postValue("连接失败: $msg\n${stack.take(300)}")
+            } finally {
+                conn?.disconnect()
             }
         }
     }
