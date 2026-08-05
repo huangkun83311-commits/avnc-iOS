@@ -237,6 +237,7 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
             profileLive.value = profile
             profile.gestureStyle = "touchscreen"
             profile.fZoomLocked = true
+            pref.runInfo.hasShownViewerHelp = true  
             state.value = State.Connecting
             frameState.setZoom(profile.zoom1, profile.zoom2)
             setViewMode(profile.viewMode)
