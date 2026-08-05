@@ -75,6 +75,7 @@
         <activity android:name=".ui.prefs.PrefsActivity" />
 
         <activity android:name=".ui.about.AboutActivity" />
+        <activity android:name=".ui.MyDevicesActivity" android:exported="false" />
     </application>
 
 </manifest>
