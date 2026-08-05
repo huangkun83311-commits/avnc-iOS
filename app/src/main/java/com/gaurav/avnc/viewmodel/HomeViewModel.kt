@@ -18,10 +18,6 @@ import com.gaurav.avnc.viewmodel.service.Discovery
 
 class HomeViewModel(app: Application) : BaseViewModel(app) {
 
-    /**
-     * [ServerProfile]s stored in database.
-     * Depending on the user pref, this list may be sorted by server name.
-     */
     val serverProfiles by lazy {
         pref.ui.sortServerList.switchMap {
             if (it) serverProfileDao.getSortedLiveList()
@@ -29,48 +25,19 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
         }
     }
 
-    /**
-     * Used to find new servers.
-     */
     val discovery = Discovery
 
-    /**
-     * Used for starting new VNC connections.
-     */
     val newConnectionEvent = LiveEvent<ServerProfile>()
-
-    /**
-     * This event is used for editing/creating server profiles.
-     * Home activity observes this event and starts profile editor when it is fired.
-     */
     val editProfileEvent = LiveEvent<ServerProfile>()
-
-    /**
-     * Fired when a profile is saved to database.
-     * Can be used to highlight the new profile in UI.
-     */
     val profileSavedEvent = LiveEvent<ServerProfile>()
-
-    /**
-     * Fired when a profile is deleted from database.
-     * This is used for notifying the user and potentially undo the deletion.
-     */
     val profileDeletedEvent = LiveEvent<ServerProfile>()
 
-    /**
-     * Starts new connection to given profile.
-     */
     fun startConnection(profile: ServerProfile) = newConnectionEvent.fire(profile)
 
     fun maybeConnectOnAppStart() = launchMain {
         serverProfileDao.getConnectableOnAppStart().firstOrNull()?.let { startConnection(it) }
     }
 
-    /**************************************************************************
-     * Server Discovery
-     *
-     * To save battery, Discovery is stopped when HomeActivity is in background.
-     **************************************************************************/
     private var autoStopped = false
 
     fun startDiscovery() {
@@ -95,17 +62,6 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
         }
     }
 
-
-    /**************************************************************************
-     * Profile editing/creating
-     *
-     * These are invoked from UI on user actions. We simply fire [editProfileEvent]
-     * with appropriate profile, causing the profile editor to be shown.
-     *
-     * NOTE: We need to make a copy of given profile because the instance
-     * given to [editProfileEvent] can be modified by the editor.
-     **************************************************************************/
-
     fun onNewProfile() = editProfileEvent.fire(ServerProfile())
     fun onNewProfile(source: ServerProfile) = editProfileEvent.fire(source.copy(ID = 0))
     fun onEditProfile(profile: ServerProfile) = editProfileEvent.fire(profile.copy())
@@ -115,12 +71,6 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
         duplicate.name += " (Copy)"
         editProfileEvent.fire(duplicate)
     }
-
-    /**************************************************************************
-     * Profile persistence
-     *
-     * These operations are asynchronous.
-     **************************************************************************/
 
     fun saveProfile(profile: ServerProfile) = launchMain {
         serverProfileDao.save(profile)
@@ -132,14 +82,6 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
         profileDeletedEvent.fire(profile)
     }
 
-    /**************************************************************************
-     * Rediscovery Indicator
-     *
-     * [rediscoveredProfiles] is the intersection of saved & discovered servers.
-     *
-     * To detect reachable server in [serverProfiles], we could directly 'ping'
-     * them, but that has its own issues.
-     **************************************************************************/
     val rediscoveredProfiles by lazy {
         pref.server.rediscoveryIndicator.switchMap {
             if (it) prepareRediscoveredProfiles()
@@ -156,7 +98,7 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
         this
     }
 
-    // ===== 以下是自定义追加：从服务器拉取设备列表 =====
+    // ===== 自定义追加 =====
     companion object {
         const val API_BASE = "http://106.52.57.127:5000"
     }
@@ -191,11 +133,7 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
                     val list = mutableListOf<ServerProfile>()
                     for (i in 0 until arr.length()) {
                         val d = arr.getJSONObject(i)
-                        list.add(ServerProfile(
-                            name = d.getString("phone_id"),
-                            host = "",
-                            port = 5900
-                        ))
+                        list.add(ServerProfile(name = d.getString("phone_id"), host = "", port = 5900))
                     }
                     myDeviceList.postValue(list)
                 } else {
@@ -208,27 +146,24 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
             }
         }
     }
+
     fun connectMyDevice(phoneId: String) {
-    launchMain {
-        try {
-            val conn = java.net.URL("$API_BASE/api/validate").openConnection() as java.net.HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.doOutput = true
-            conn.outputStream.write("{\"phone_id\":\"$phoneId\",\"code_id\":\"\",\"user_ip\":\"\"}".toByteArray())
-            val json = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
-            if (json.getBoolean("success")) {
-                newConnectionEvent.fire(ServerProfile(
-                    name = phoneId,
-                    host = json.getString("host"),
-                    port = json.getInt("port")
-                ))
-            } else {
-                myErrorMessage.postValue(json.optString("message", "验证失败"))
+        launchMain {
+            try {
+                val conn = java.net.URL("$API_BASE/api/validate").openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.doOutput = true
+                conn.outputStream.write("{\"phone_id\":\"$phoneId\",\"code_id\":\"\",\"user_ip\":\"\"}".toByteArray())
+                val json = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+                if (json.getBoolean("success")) {
+                    newConnectionEvent.fire(ServerProfile(name = phoneId, host = json.getString("host"), port = json.getInt("port")))
+                } else {
+                    myErrorMessage.postValue(json.optString("message", "验证失败"))
+                }
+            } catch (e: Exception) {
+                myErrorMessage.postValue("连接失败: ${e.message}")
             }
-        } catch (e: Exception) {
-            myErrorMessage.postValue("连接失败: ${e.message}")
         }
     }
-
 }
