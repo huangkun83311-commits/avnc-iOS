@@ -1,8 +1,10 @@
 package com.gaurav.avnc.ui
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.viewModels
@@ -14,6 +16,7 @@ import com.gaurav.avnc.viewmodel.LoginViewModel
 class LoginActivity : AppCompatActivity() {
 
     private val viewModel by viewModels<LoginViewModel>()
+    private val prefs by lazy { getSharedPreferences("avnc_login", Context.MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -21,7 +24,24 @@ class LoginActivity : AppCompatActivity() {
 
         val accountInput = findViewById<EditText>(R.id.account_input)
         val passwordInput = findViewById<EditText>(R.id.password_input)
+        val rememberCheck = findViewById<CheckBox>(R.id.remember_check)
         val loginBtn = findViewById<Button>(R.id.login_btn)
+
+        // 自动登录
+        val savedToken = prefs.getString("token", "")
+        val savedUsername = prefs.getString("username", "")
+        val savedIsAdmin = prefs.getBoolean("isAdmin", false)
+        if (savedToken?.isNotEmpty() == true) {
+            startHome(savedToken, savedUsername ?: "", savedIsAdmin)
+            return
+        }
+
+        // 回填账号密码
+        if (prefs.getBoolean("remember", false)) {
+            accountInput.setText(prefs.getString("account", ""))
+            passwordInput.setText(prefs.getString("password", ""))
+            rememberCheck.isChecked = true
+        }
 
         loginBtn.setOnClickListener {
             val account = accountInput.text.toString().trim()
@@ -36,20 +56,30 @@ class LoginActivity : AppCompatActivity() {
         viewModel.loginResult.observe(this) { result ->
             result.onSuccess { data ->
                 val token = data.getString("token")
-                val username = if (data.has("phone")) {
-                    data.getString("phone")
-                } else {
+                val phone = data.optString("phone", "")
+                val isAdmin = phone.isEmpty()
+                val username = if (isAdmin) {
                     data.getJSONObject("user").getString("username")
+                } else {
+                    phone
                 }
-                val isAdmin = data.has("user")
 
-                val intent = Intent(this, HomeActivity::class.java).apply {
-                    putExtra("token", token)
-                    putExtra("username", username)
-                    putExtra("is_admin", isAdmin)
+                // 保存
+                prefs.edit().putString("token", token)
+                    .putString("username", username)
+                    .putBoolean("isAdmin", isAdmin)
+                    .putBoolean("remember", rememberCheck.isChecked)
+                    .apply()
+
+                if (rememberCheck.isChecked) {
+                    prefs.edit().putString("account", accountInput.text.toString().trim())
+                        .putString("password", passwordInput.text.toString())
+                        .apply()
+                } else {
+                    prefs.edit().remove("account").remove("password").apply()
                 }
-                startActivity(intent)
-                finish()
+
+                startHome(token, username, isAdmin)
             }.onFailure { e ->
                 Toast.makeText(this, "登录失败: ${e.message}", Toast.LENGTH_LONG).show()
             }
@@ -59,5 +89,14 @@ class LoginActivity : AppCompatActivity() {
             loginBtn.isEnabled = !isLoading
             loginBtn.text = if (isLoading) "登录中..." else "登 录"
         }
+    }
+
+    private fun startHome(token: String, username: String, isAdmin: Boolean) {
+        startActivity(Intent(this, HomeActivity::class.java).apply {
+            putExtra("token", token)
+            putExtra("username", username)
+            putExtra("is_admin", isAdmin)
+        })
+        finish()
     }
 }
