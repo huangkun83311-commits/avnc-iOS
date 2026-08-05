@@ -9,7 +9,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="手机远程客户端"
+        android:text="云控客户端"
         android:textSize="22sp"
         android:textStyle="bold" />
 
@@ -37,6 +37,13 @@
         android:layout_marginTop="12dp"
         android:hint="密码"
         android:inputType="textPassword" />
+
+    <CheckBox
+        android:id="@+id/remember_check"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="记住密码" />
 
     <Button
         android:id="@+id/login_btn"
