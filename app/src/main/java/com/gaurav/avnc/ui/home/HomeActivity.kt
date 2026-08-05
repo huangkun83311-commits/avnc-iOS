@@ -1,163 +1,254 @@
+/*
+ * Copyright (c) 2020  Gaurav Ujjwal.
+ *
+ * SPDX-License-Identifier:  GPL-3.0-or-later
+ *
+ * See COPYING.txt for more details.
+ */
+
 package com.gaurav.avnc.ui.home
 
+import android.app.ActivityOptions
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.Window
-import android.widget.*
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import com.gaurav.avnc.R
+import com.gaurav.avnc.databinding.ActivityHomeBinding
+import com.gaurav.avnc.model.ServerProfile
+import com.gaurav.avnc.ui.about.AboutActivity
+import com.gaurav.avnc.ui.prefs.PrefsActivity
+import com.gaurav.avnc.ui.vnc.IntentReceiverActivity
 import com.gaurav.avnc.ui.vnc.startVncActivity
+import com.gaurav.avnc.util.Debugging
+import com.gaurav.avnc.util.EdgeToEdgeHelper
 import com.gaurav.avnc.util.MsgDialog
 import com.gaurav.avnc.viewmodel.HomeViewModel
 import com.gaurav.avnc.vnc.VncClient
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 
+/**
+ * Primary activity of the app.
+ *
+ * It Provides access to saved and discovered servers.
+ */
 class HomeActivity : AppCompatActivity() {
     val viewModel by viewModels<HomeViewModel>()
-    private var refreshJob: Job? = null
-    private lateinit var groupList: ListView
-    private lateinit var deviceList: ListView
-    private lateinit var deviceAdapter: DeviceListAdapter
-    private var allDevices = mutableListOf<JSONObject>()
-    private var currentGroupDevices = mutableListOf<JSONObject>()
+    private lateinit var binding: ActivityHomeBinding
+    private val tabs = ServerTabs(this)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(R.style.App_Theme)
         super.onCreate(savedInstanceState)
         window.requestFeature(Window.FEATURE_ACTIVITY_TRANSITIONS)
-        setContentView(R.layout.activity_home)
 
-        viewModel.token = intent.getStringExtra("token") ?: ""
-        viewModel.username = intent.getStringExtra("username") ?: ""
-        viewModel.isAdmin = intent.getBooleanExtra("is_admin", false)
+        //View Inflation
+        binding = EdgeToEdgeHelper.setDataBindingContentView(this, R.layout.activity_home)
+        binding.lifecycleOwner = this
 
-        val titleText = findViewById<TextView>(R.id.title_text)
-        groupList = findViewById(R.id.group_list)
-        deviceList = findViewById(R.id.device_list)
-        val logoutBtn = findViewById<Button>(R.id.logout_btn)
-        val refreshBtn = findViewById<Button>(R.id.refresh_btn)
+        tabs.create(binding.tabLayout, binding.pager)
 
-        titleText.text = "👤 ${viewModel.username} 的设备"
+        binding.drawerNav.setNavigationItemSelectedListener { onMenuItemSelected(it.itemId) }
+        binding.navigationBtn.setOnClickListener { binding.drawerLayout.open() }
+        binding.settingsBtn.setOnClickListener { showSettings() }
+        binding.urlbar.setOnClickListener { showUrlActivity() }
 
-        // 分组列表适配器
-        val groupAdapter = ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, mutableListOf("📁 全部设备", "📁 未分组"))
-        groupList.adapter = groupAdapter
+        //Observers
+        viewModel.editProfileEvent.observe(this) { showProfileEditor(it) }
+        viewModel.profileSavedEvent.observe(this) { onProfileInserted(it) }
+        viewModel.profileDeletedEvent.observe(this) { onProfileDeleted(it) }
+        viewModel.newConnectionEvent.observe(this) { startNewConnection(it) }
+        viewModel.discovery.servers.observe(this) { updateDiscoveryBadge(it) }
+        viewModel.serverProfiles.observe(this) { updateShortcuts(it) }
 
-        // 设备列表适配器
-        deviceAdapter = DeviceListAdapter(this, currentGroupDevices)
-        deviceList.adapter = deviceAdapter
-
-        // 加载分组
-        viewModel.groupList.observe(this) { groups ->
-            groupAdapter.clear()
-            groupAdapter.add("📁 全部设备")
-            for (g in groups) {
-                groupAdapter.add("📁 ${g.optString("name", "未命名")}")
-            }
-            groupAdapter.add("📁 未分组")
-            groupAdapter.notifyDataSetChanged()
-        }
-
-        // 原始设备数据
-        viewModel.rawDeviceList.observe(this) { devices ->
-            allDevices = devices
-            // 默认显示全部
-            currentGroupDevices.clear()
-            currentGroupDevices.addAll(allDevices)
-            deviceAdapter.notifyDataSetChanged()
-        }
-
-        // 加载状态
-        viewModel.isLoading.observe(this) { loading ->
-            refreshBtn.text = if (loading) "⏳ 加载中..." else "🔄 刷新"
-        }
-
-        // 错误
-        viewModel.errorMessage.observe(this) { msg ->
-            if (msg.isNotEmpty()) Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
-        }
-
-        // 连接事件
-        viewModel.newConnectionEvent.observe(this) { profile ->
-            if (checkNativeLib()) startVncActivity(this, profile)
-        }
-
-        // 点击分组
-        groupList.setOnItemClickListener { _, _, position, _ ->
-            val selected = groupAdapter.getItem(position) ?: return@setOnItemClickListener
-            val groups = viewModel.groupsData
-
-            currentGroupDevices.clear()
-            when {
-                selected == "📁 全部设备" -> currentGroupDevices.addAll(allDevices)
-                selected == "📁 未分组" -> {
-                    val groupedIds = mutableSetOf<String>()
-                    for (g in groups) {
-                        val devs = g.optJSONArray("devices") ?: continue
-                        for (i in 0 until devs.length()) {
-                            groupedIds.add(devs.getJSONObject(i).getString("phone_id"))
-                        }
-                    }
-                    for (d in allDevices) {
-                        if (d.getString("phone_id") !in groupedIds) currentGroupDevices.add(d)
-                    }
-                }
-                else -> {
-                    // 自定义分组
-                    val groupName = selected.removePrefix("📁 ")
-                    for (g in groups) {
-                        if (g.optString("name") == groupName) {
-                            val devs = g.optJSONArray("devices") ?: continue
-                            for (i in 0 until devs.length()) {
-                                currentGroupDevices.add(devs.getJSONObject(i))
-                            }
-                            break
-                        }
-                    }
-                }
-            }
-            deviceAdapter.notifyDataSetChanged()
-        }
-
-        // 点击设备
-        deviceList.setOnItemClickListener { _, _, position, _ ->
-            val device = currentGroupDevices.getOrNull(position) ?: return@setOnItemClickListener
-            val phoneId = device.optString("phone_id", device.optString("name", ""))
-            viewModel.connectDevice(phoneId, device.optString("code_id", ""))
-        }
-
-        refreshBtn.setOnClickListener { viewModel.fetchDevices() }
-
-        logoutBtn.setOnClickListener {
-            refreshJob?.cancel()
-            finish()
-        }
-
-        viewModel.fetchDevices()
-        startAutoRefresh()
+        setupSplashTheme()
+        showWelcomeMsg()
+        maybeAutoConnect(savedInstanceState == null)
     }
 
-    private fun startAutoRefresh() {
-        refreshJob = lifecycleScope.launch {
-            while (isActive) {
-                delay(8000)
-                viewModel.fetchDevices()
-            }
+    override fun onStart() {
+        super.onStart()
+        viewModel.autoStartDiscovery()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations)
+            viewModel.autoStopDiscovery()
+    }
+
+    /**
+     * Handle drawer item selection.
+     */
+    private fun onMenuItemSelected(itemId: Int): Boolean {
+        when (itemId) {
+            R.id.settings -> showSettings()
+            R.id.about -> showAbout()
+            R.id.report_bug -> launchBugReport()
+            else -> return false
         }
+        binding.drawerLayout.close()
+        return true
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        refreshJob?.cancel()
+    private fun startNewConnection(profile: ServerProfile) {
+        if (checkNativeLib())
+            startVncActivity(this, profile)
     }
 
+    /**
+     * Launches Settings activity
+     */
+    private fun showSettings() {
+        startActivity(Intent(this, PrefsActivity::class.java))
+    }
+
+    private fun showAbout() {
+        startActivity(Intent(this, AboutActivity::class.java))
+    }
+
+    private fun launchBugReport() {
+        val url = AboutActivity.BUG_REPORT_URL + Debugging.bugReportUrlParams()
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
+    }
+
+    /**
+     * Launches VNC Url activity
+     */
+    private fun showUrlActivity() {
+        val anim = ActivityOptions.makeSceneTransitionAnimation(this, binding.urlbar, "urlbar")
+        startActivity(Intent(this, UrlBarActivity::class.java), anim.toBundle())
+    }
+
+    private fun showProfileEditor(profile: ServerProfile) {
+        startProfileEditor(this, profile, viewModel.pref.ui.preferAdvancedEditor)
+    }
+
+    private fun onProfileInserted(profile: ServerProfile) {
+        tabs.showSavedServers()
+
+        // Show snackbar for new servers
+        if (profile.ID == 0L)
+            Snackbar.make(binding.root, R.string.msg_server_profile_added, Snackbar.LENGTH_SHORT).show()
+    }
+
+    /**
+     * Shows delete confirmation snackbar, allowing the user to Undo deletion.
+     */
+    private fun onProfileDeleted(profile: ServerProfile) {
+        Snackbar.make(binding.root, R.string.msg_server_profile_deleted, Snackbar.LENGTH_LONG)
+                .setAction(getString(R.string.title_undo)) { viewModel.saveProfile(profile) }
+                .show()
+    }
+
+    private fun updateDiscoveryBadge(list: List<ServerProfile>) {
+        tabs.updateDiscoveryBadge(list.size)
+    }
+
+    private fun showWelcomeMsg() {
+        /*if (!viewModel.pref.runInfo.hasShownV3WelcomeMsg) {
+            viewModel.pref.runInfo.hasShownV3WelcomeMsg = true
+            packageManager.getPackageInfo(packageName, 0).let {
+                if (it.lastUpdateTime > it.firstInstallTime)
+                    WelcomeFragment().show(supportFragmentManager, "WelcomeV3")
+            }
+        }*/
+    }
+
+    /**
+     * Warns about missing native library.
+     * This can happen if AVNC is installed by copying APK from a device with different architecture.
+     */
     private fun checkNativeLib(): Boolean {
-        return runCatching { VncClient.loadLibrary() }.onFailure {
-            MsgDialog.show(supportFragmentManager, "错误", "缺少原生库")
+        return runCatching {
+            VncClient.loadLibrary()
+        }.onFailure {
+            val msg = "You may have installed AVNC using an incorrect APK. " +
+                      "Please install correct version from F-Droid or Google Play."
+            MsgDialog.show(supportFragmentManager, "Native library is missing!", msg)
         }.isSuccess
+    }
+
+    /**
+     * Updates splash theme to match with app theme
+     */
+    private fun setupSplashTheme() {
+        if (Build.VERSION.SDK_INT < 31)
+            return
+
+        viewModel.pref.ui.theme.observe(this) {
+            when (it) {
+                "light" -> splashScreen.setSplashScreenTheme(R.style.App_SplashTheme_Light)
+                "dark" -> splashScreen.setSplashScreenTheme(R.style.App_SplashTheme_Dark)
+                else -> splashScreen.setSplashScreenTheme(R.style.App_SplashTheme)
+            }
+        }
+    }
+
+    private fun maybeAutoConnect(isNewStart: Boolean) {
+        if (isNewStart)
+            viewModel.maybeConnectOnAppStart()
+    }
+
+    /************************************************************************************
+     * Shortcuts
+     ************************************************************************************/
+
+    private fun createShortcutId(profile: ServerProfile) = "shortcut:pid:${profile.ID}"
+
+    private fun updateShortcuts(profiles: List<ServerProfile>) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching {
+                val sortedProfiles = profiles.sortedByDescending { it.useCount }
+                updateShortcutState(sortedProfiles)
+                updateDynamicShortcuts(sortedProfiles)
+            }.onFailure {
+                Log.e("Shortcuts", "Unable to update shortcuts", it)
+            }
+        }
+    }
+
+    /**
+     * Enable/Disable shortcuts based on availability in [profiles]
+     */
+    private fun updateShortcutState(profiles: List<ServerProfile>) {
+        val pinnedShortcuts = ShortcutManagerCompat.getShortcuts(this, ShortcutManagerCompat.FLAG_MATCH_PINNED)
+        val disabledMessage = getString(R.string.msg_shortcut_server_deleted)
+
+        val possibleIds = profiles.map { createShortcutId(it) }
+        val pinnedIds = pinnedShortcuts.map { it.id }
+        val enabledIds = pinnedIds.intersect(possibleIds).toList()
+        val enabledShortcuts = pinnedShortcuts.filter { it.id in enabledIds }
+        val disabledIds = pinnedIds.subtract(enabledIds).toList()
+
+        ShortcutManagerCompat.enableShortcuts(this, enabledShortcuts)
+        ShortcutManagerCompat.disableShortcuts(this, disabledIds, disabledMessage)
+    }
+
+    /**
+     * Updates dynamic shortcut list
+     */
+    private fun updateDynamicShortcuts(profiles: List<ServerProfile>) {
+        val maxShortcuts = ShortcutManagerCompat.getMaxShortcutCountPerActivity(this)
+        val shortcuts = profiles.take(maxShortcuts).mapIndexed { i, p ->
+            ShortcutInfoCompat.Builder(this, createShortcutId(p))
+                    .setIcon(IconCompat.createWithResource(this, R.drawable.ic_computer_shortcut))
+                    .setShortLabel(p.name.ifBlank { p.host })
+                    .setLongLabel(p.name.ifBlank { p.host })
+                    .setRank(i)
+                    .setIntent(IntentReceiverActivity.createShortcutIntent(this, p.ID))
+                    .build()
+        }
+        ShortcutManagerCompat.setDynamicShortcuts(this, shortcuts)
     }
 }
