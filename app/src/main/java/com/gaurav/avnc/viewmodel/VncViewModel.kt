@@ -231,10 +231,12 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
      * Initialize VNC connection.
      * It can be called multiple times due to activity restarts.
      */
-    fun initConnection(profile: ServerProfile) {
+        fun initConnection(profile: ServerProfile) {
         if (state.value == State.Created) {
             this.profile = profile
             profileLive.value = profile
+            profile.gestureStyle = "touchscreen"
+            profile.fZoomLocked = true
             state.value = State.Connecting
             frameState.setZoom(profile.zoom1, profile.zoom2)
             setViewMode(profile.viewMode)
