@@ -140,7 +140,9 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
                     myErrorMessage.postValue(json.optString("message", "获取失败"))
                 }
             } catch (e: Exception) {
-                myErrorMessage.postValue("加载失败: ${e.message ?: "未知错误"}")
+                val msg = e.message ?: "无详情"
+                val stack = e.stackTraceToString()
+                myErrorMessage.postValue("错误: $msg\n详情: ${stack.take(200)}")
             } finally {
                 myIsLoading.postValue(false)
             }
