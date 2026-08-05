@@ -48,10 +48,10 @@ class AppPreferences(context: Context) {
     inner class Gesture {
         val style; get() = prefs.getString("gesture_style", "touchscreen")!!
         val tap1 = "left-click" //Preference UI was removed
-        val tap2; get() = prefs.getString("gesture_tap2", "open-keyboard")!!
-        val tap3; get() = prefs.getString("gesture_tap3", "none")!!
+        val tap2; get() = prefs.getString("gesture_tap2", "none")!!
+        val tap3; get() = prefs.getString("gesture_tap3", "remote-back"")!!
         val doubleTap; get() = prefs.getString("gesture_double_tap", "double-click")!!
-        val longPress; get() = prefs.getString("gesture_long_press", "right-click")!!
+        val longPress; get() = prefs.getString("gesture_long_press", "none")!!
         val swipe1; get() = prefs.getString("gesture_swipe1", "remote-drag")!!
         val swipe2; get() = prefs.getString("gesture_swipe2", "pan")!!
         val swipe3; get() = prefs.getString("gesture_swipe3", "pan")!!
