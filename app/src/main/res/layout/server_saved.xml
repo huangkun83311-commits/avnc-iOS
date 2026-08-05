@@ -6,23 +6,46 @@
   ~ See COPYING.txt for more details.
   -->
 
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:clipChildren="false">
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/servers_rv"
-        style="@style/ServerList"
+    <data>
+
+        <variable
+            name="viewModel"
+            type="com.gaurav.avnc.viewmodel.HomeViewModel" />
+    </data>
+
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:contentDescription="@string/desc_saved_servers_list"
-        tools:listitem="@layout/server_saved_item" />
+        android:clipChildren="false">
 
-    <TextView
-        style="@style/TipView"
-        android:text="@string/tip_empty_server_list"
-        tools:visibility="visible" />
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/servers_rv"
+            style="@style/ServerList"
+            android:layout_width="match_parent"
+            app:isVisible="@{!viewModel.serverProfiles.empty}"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/desc_saved_servers_list"
+            tools:listitem="@layout/server_saved_item" />
 
-</FrameLayout>
+        <TextView
+            style="@style/TipView"
+            android:text="@string/tip_empty_server_list"
+            android:visibility="gone"
+            app:isVisible="@{viewModel.serverProfiles.empty}"
+            tools:visibility="visible" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            style="@style/Widget.MaterialComponents.FloatingActionButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="@dimen/margin_normal"
+            android:contentDescription="@string/desc_add_new_server_btn"
+            android:onClick="@{()-> viewModel.onNewProfile()}"
+            android:src="@drawable/ic_plus" />
+    </FrameLayout>
+</layout>
