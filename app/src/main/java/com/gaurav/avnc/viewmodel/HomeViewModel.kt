@@ -155,4 +155,57 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
         addSource(discovery.servers) { value = filter(serverProfiles.value, it) }
         this
     }
+
+    // ===== 以下是自定义追加：从服务器拉取设备列表 =====
+    companion object {
+        const val API_BASE = "http://106.52.57.127:5000"
+    }
+
+    var token: String = ""
+    var username: String = ""
+    var isAdmin: Boolean = false
+
+    val myDeviceList = MutableLiveData<List<ServerProfile>>()
+    val myIsLoading = MutableLiveData(false)
+    val myErrorMessage = MutableLiveData<String>()
+
+    fun fetchMyDevices() {
+        myIsLoading.value = true
+        launchMain {
+            try {
+                val url = if (isAdmin) "$API_BASE/api/admin/vnc_devices"
+                          else "$API_BASE/api/client/devices"
+                val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = if (isAdmin) "GET" else "POST"
+                if (isAdmin) {
+                    conn.setRequestProperty("Authorization", "Bearer $token")
+                } else {
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.doOutput = true
+                    conn.outputStream.write("{\"phone\":\"$username\"}".toByteArray())
+                }
+                val resp = conn.inputStream.bufferedReader().readText()
+                val json = org.json.JSONObject(resp)
+                if (json.optBoolean("success")) {
+                    val arr = json.getJSONArray("devices")
+                    val list = mutableListOf<ServerProfile>()
+                    for (i in 0 until arr.length()) {
+                        val d = arr.getJSONObject(i)
+                        list.add(ServerProfile(
+                            name = d.getString("phone_id"),
+                            host = "",
+                            port = 5900
+                        ))
+                    }
+                    myDeviceList.postValue(list)
+                } else {
+                    myErrorMessage.postValue(json.optString("message", "获取失败"))
+                }
+            } catch (e: Exception) {
+                myErrorMessage.postValue("加载失败: ${e.message}")
+            } finally {
+                myIsLoading.postValue(false)
+            }
+        }
+    }
 }
