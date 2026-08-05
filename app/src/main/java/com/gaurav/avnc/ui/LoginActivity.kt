@@ -5,7 +5,10 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import com.gaurav.avnc.R
 import com.gaurav.avnc.databinding.ActivityLoginBinding
+import com.gaurav.avnc.ui.home.HomeActivity
+import com.gaurav.avnc.util.EdgeToEdgeHelper
 import com.gaurav.avnc.viewmodel.LoginViewModel
 
 class LoginActivity : AppCompatActivity() {
@@ -15,8 +18,7 @@ class LoginActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityLoginBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        binding = EdgeToEdgeHelper.setDataBindingContentView(this, R.layout.activity_login) as ActivityLoginBinding
 
         binding.loginBtn.setOnClickListener {
             val account = binding.accountInput.text.toString().trim()
@@ -28,14 +30,17 @@ class LoginActivity : AppCompatActivity() {
             viewModel.login(account, password)
         }
 
-        // 观察登录结果
         viewModel.loginResult.observe(this) { result ->
             result.onSuccess { data ->
                 val token = data.getString("token")
-                val username = data.getString("phone") ?: data.getJSONObject("user").getString("username")
+                val username = if (data.has("phone")) {
+                    data.getString("phone")
+                } else {
+                    data.getJSONObject("user").getString("username")
+                }
                 val isAdmin = data.has("user")
-                // 跳转到设备列表
-                val intent = Intent(this, com.gaurav.avnc.ui.home.HomeActivity::class.java).apply {
+
+                val intent = Intent(this, HomeActivity::class.java).apply {
                     putExtra("token", token)
                     putExtra("username", username)
                     putExtra("is_admin", isAdmin)
