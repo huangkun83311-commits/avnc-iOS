@@ -20,34 +20,41 @@
         android:supportsRtl="true"
         android:theme="@style/App.Theme">
 
-        <activity-alias
-            android:name=".StartupActivity"
+        <!-- ===== 修改：LoginActivity 作为启动页 ===== -->
+        <activity
+            android:name=".ui.LoginActivity"
             android:exported="true"
-            android:targetActivity=".ui.home.HomeActivity">
+            android:theme="@style/App.Theme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <!-- ===== 原 StartupActivity 别名改回 HomeActivity ===== -->
+        <activity-alias
+            android:name=".StartupActivity"
+            android:exported="true"
+            android:targetActivity=".ui.home.HomeActivity">
+            <!-- 不再作为启动入口 -->
         </activity-alias>
 
+        <!-- ===== 保留 ===== -->
         <activity-alias
             android:name=".UriReceiverActivity"
             android:exported="true"
             android:targetActivity=".ui.vnc.IntentReceiverActivity">
-
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
-
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-
                 <data android:scheme="vnc" />
             </intent-filter>
         </activity-alias>
 
         <activity
             android:name=".ui.home.HomeActivity"
-            android:theme="@style/App.SplashTheme.Dark" />
+            android:exported="false" />
 
         <activity
             android:name=".ui.home.UrlBarActivity"
