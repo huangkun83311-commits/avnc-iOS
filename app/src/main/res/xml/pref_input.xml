@@ -57,7 +57,7 @@
             app:useSimpleSummaryProvider="true" />
 
         <com.gaurav.avnc.ui.prefs.ListPreferenceEx
-            app:defaultValue="remote-scroll"
+            app:defaultValue="remote-drag"
             app:entries="@array/swipe1_action_entries"
             app:entryValues="@array/swipe1_action_values"
             app:key="gesture_swipe1"
