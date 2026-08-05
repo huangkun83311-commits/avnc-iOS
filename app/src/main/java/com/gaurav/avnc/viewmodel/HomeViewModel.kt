@@ -43,6 +43,13 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
      */
     val newConnectionEvent = LiveEvent<ServerProfile>()
 
+    // ===== 分组相关 =====
+    val groupList = MutableLiveData<List<JSONObject>>()
+    var groupsData = mutableListOf<JSONObject>()
+
+    val rawDeviceList = MutableLiveData<MutableList<JSONObject>>()
+    private var rawDevices = mutableListOf<JSONObject>()
+
     /**
      * 从服务器拉取设备列表
      */
@@ -50,7 +57,7 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
         isLoading.value = true
         viewModelScope.launch {
             try {
-                val devices = withContext(Dispatchers.IO) {
+                val (devices, rawList) = withContext(Dispatchers.IO) {
                     val url = if (isAdmin) {
                         "$API_BASE/api/admin/vnc_devices"
                     } else {
@@ -75,41 +82,64 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
                     val arr: JSONArray
                     val success = json.optBoolean("success", false)
                     if (success) {
-                        if (isAdmin) {
-                            arr = json.getJSONArray("devices")
-                        } else {
-                            arr = json.getJSONArray("devices")
-                        }
+                        arr = if (isAdmin) json.getJSONArray("devices") else json.getJSONArray("devices")
                     } else {
                         throw Exception(json.optString("message", "获取设备列表失败"))
                     }
 
                     val list = mutableListOf<ServerProfile>()
+                    val raw = mutableListOf<JSONObject>()
                     for (i in 0 until arr.length()) {
                         val d = arr.getJSONObject(i)
-                        val phoneId = if (isAdmin) d.getString("phone_id") else d.getString("phone_id")
-                        val codeId = if (isAdmin) d.optString("code_id", "") else d.optString("code_id", "")
-                        val expireTime = if (isAdmin) d.optString("expire_time", "-") else d.optString("expire_time", "-")
+                        val phoneId = d.getString("phone_id")
+                        val codeId = d.optString("code_id", "")
+                        val expireTime = d.optString("expire_time", "-")
 
                         list.add(ServerProfile(
                             name = phoneId,
-                            host = "",  // 连接时从 /api/validate 获取
+                            host = "",
                             port = 5900,
-                            password = "",  // 连接时从 /api/validate 获取
+                            password = "",
                             useCount = 0
-                        ).also {
-                            // 把额外信息存到 host 字段里临时用
-                            // 正式建议在 ServerProfile 里加字段
-                        })
+                        ))
+                        raw.add(d)
                     }
-                    list
+                    Pair(list, raw)
                 }
                 deviceList.postValue(devices)
+                rawDevices = rawList
+                rawDeviceList.postValue(rawDevices)
+                fetchGroups()
             } catch (e: Exception) {
                 errorMessage.postValue("加载失败: ${e.message}")
             } finally {
                 isLoading.postValue(false)
             }
+        }
+    }
+
+    /**
+     * 拉取分组列表
+     */
+    fun fetchGroups() {
+        if (isAdmin) {
+            groupList.postValue(emptyList())
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val groups = withContext(Dispatchers.IO) {
+                    val conn = URL("$API_BASE/api/my/groups").openConnection() as HttpURLConnection
+                    conn.setRequestProperty("Authorization", "Bearer $token")
+                    val resp = conn.inputStream.bufferedReader().readText()
+                    val json = JSONObject(resp)
+                    if (json.getBoolean("success")) json.getJSONArray("groups") else JSONArray()
+                }
+                val list = mutableListOf<JSONObject>()
+                for (i in 0 until groups.length()) list.add(groups.getJSONObject(i))
+                groupsData = list
+                groupList.postValue(list)
+            } catch (_: Exception) {}
         }
     }
 
