@@ -36,12 +36,12 @@ class AppPreferences(context: Context) {
         val drawBehindCutout; get() = fullscreen && prefs.getBoolean("viewer_draw_behind_cutout", false)
         val keepScreenOn; get() = prefs.getBoolean("keep_screen_on", true)
         val toolbarAlignment; get() = prefs.getString("toolbar_alignment", "start")
-        val toolbarOpenWithSwipe; get() = prefs.getBoolean("toolbar_open_with_swipe", true)
+        val toolbarOpenWithSwipe; get() = prefs.getBoolean("toolbar_open_with_swipe", false)
         val toolbarOpenWithButton; get() = prefs.getBoolean("toolbar_open_with_button", false)
         val zoomMax; get() = prefs.getInt("zoom_max", 500) / 100F
         val zoomMin; get() = prefs.getInt("zoom_min", 50) / 100F
         val perOrientationZoom; get() = prefs.getBoolean("per_orientation_zoom", true)
-        val toolbarShowGestureStyleToggle; get() = prefs.getBoolean("toolbar_show_gesture_style_toggle", true)
+        val toolbarShowGestureStyleToggle; get() = prefs.getBoolean("toolbar_show_gesture_style_toggle", false)
         val pauseUpdatesInBackground; get() = prefs.getBoolean("pause_fb_updates_in_background", false)
     }
 
