@@ -15,8 +15,6 @@ import androidx.lifecycle.switchMap
 import com.gaurav.avnc.model.ServerProfile
 import com.gaurav.avnc.util.LiveEvent
 import com.gaurav.avnc.viewmodel.service.Discovery
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -118,7 +116,7 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
 
     fun fetchMyDevices() {
         myIsLoading.value = true
-        viewModelCoroutineScope.launch(Dispatchers.IO) {
+        launchIO {
             var conn: HttpURLConnection? = null
             try {
                 val url = if (isAdmin) "$API_BASE/api/admin/vnc_devices"
@@ -166,7 +164,7 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
     }
 
     fun connectMyDevice(phoneId: String) {
-        viewModelCoroutineScope.launch(Dispatchers.IO) {
+        launchIO {
             var conn: HttpURLConnection? = null
             try {
                 conn = URL("$API_BASE/api/validate").openConnection() as HttpURLConnection
@@ -186,7 +184,7 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
 
                 val json = JSONObject(respText)
                 if (json.getBoolean("success")) {
-                    viewModelCoroutineScope.launch(Dispatchers.Main) {
+                    launchMain {
                         newConnectionEvent.fire(
                             ServerProfile(
                                 name = phoneId,
