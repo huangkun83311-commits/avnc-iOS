@@ -57,7 +57,7 @@
             app:useSimpleSummaryProvider="true" />
 
         <com.gaurav.avnc.ui.prefs.ListPreferenceEx
-            app:defaultValue="pan"
+            app:defaultValue="remote-scroll"
             app:entries="@array/swipe1_action_entries"
             app:entryValues="@array/swipe1_action_values"
             app:key="gesture_swipe1"
@@ -106,7 +106,7 @@
             app:title="@string/pref_swipe_sensitivity" />
 
         <SwitchPreference
-            android:defaultValue="false"
+            android:defaultValue="true"
             app:key="invert_vertical_scrolling"
             app:title="@string/pref_invert_vertical_scrolling" />
     </PreferenceCategory>
@@ -152,7 +152,7 @@
         app:title="@string/pref_vk">
 
         <SwitchPreference
-            app:defaultValue="false"
+            app:defaultValue="true"
             app:key="vk_open_with_keyboard"
             app:title="@string/pref_vk_open_with_keyboard" />
 
