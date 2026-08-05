@@ -1,5 +1,6 @@
 package com.gaurav.avnc.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
@@ -50,6 +51,8 @@ class MyDevicesActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.logout_btn).setOnClickListener {
+            getSharedPreferences("avnc_login", MODE_PRIVATE).edit().clear().apply()
+            startActivity(Intent(this, LoginActivity::class.java))
             finish()
         }
 
