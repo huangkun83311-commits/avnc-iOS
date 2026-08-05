@@ -2,15 +2,11 @@ package com.gaurav.avnc.ui.home
 
 import android.os.Bundle
 import android.view.Window
-import android.widget.Button
-import android.widget.ListView
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.gaurav.avnc.R
-import com.gaurav.avnc.model.ServerProfile
 import com.gaurav.avnc.ui.vnc.startVncActivity
 import com.gaurav.avnc.util.MsgDialog
 import com.gaurav.avnc.viewmodel.HomeViewModel
@@ -19,75 +15,129 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 class HomeActivity : AppCompatActivity() {
     val viewModel by viewModels<HomeViewModel>()
     private var refreshJob: Job? = null
+    private lateinit var groupList: ListView
+    private lateinit var deviceList: ListView
+    private lateinit var deviceAdapter: DeviceListAdapter
+    private var allDevices = mutableListOf<JSONObject>()
+    private var currentGroupDevices = mutableListOf<JSONObject>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.requestFeature(Window.FEATURE_ACTIVITY_TRANSITIONS)
         setContentView(R.layout.activity_home)
 
-        // 接收登录传过来的参数
         viewModel.token = intent.getStringExtra("token") ?: ""
         viewModel.username = intent.getStringExtra("username") ?: ""
         viewModel.isAdmin = intent.getBooleanExtra("is_admin", false)
 
         val titleText = findViewById<TextView>(R.id.title_text)
-        val deviceList = findViewById<ListView>(R.id.device_list)
+        groupList = findViewById(R.id.group_list)
+        deviceList = findViewById(R.id.device_list)
         val logoutBtn = findViewById<Button>(R.id.logout_btn)
         val refreshBtn = findViewById<Button>(R.id.refresh_btn)
 
         titleText.text = "👤 ${viewModel.username} 的设备"
 
-        // 适配器
-        val adapter = DeviceListAdapter(this, mutableListOf())
-        deviceList.adapter = adapter
+        // 分组列表适配器
+        val groupAdapter = ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, mutableListOf("📁 全部设备", "📁 未分组"))
+        groupList.adapter = groupAdapter
 
-        // 观察设备列表
-        viewModel.deviceList.observe(this) { devices ->
-            adapter.clear()
-            adapter.addAll(devices)
-            adapter.notifyDataSetChanged()
+        // 设备列表适配器
+        deviceAdapter = DeviceListAdapter(this, currentGroupDevices)
+        deviceList.adapter = deviceAdapter
+
+        // 加载分组
+        viewModel.groupList.observe(this) { groups ->
+            groupAdapter.clear()
+            groupAdapter.add("📁 全部设备")
+            for (g in groups) {
+                groupAdapter.add("📁 ${g.optString("name", "未命名")}")
+            }
+            groupAdapter.add("📁 未分组")
+            groupAdapter.notifyDataSetChanged()
         }
 
-        // 观察加载状态
+        // 原始设备数据
+        viewModel.rawDeviceList.observe(this) { devices ->
+            allDevices = devices
+            // 默认显示全部
+            currentGroupDevices.clear()
+            currentGroupDevices.addAll(allDevices)
+            deviceAdapter.notifyDataSetChanged()
+        }
+
+        // 加载状态
         viewModel.isLoading.observe(this) { loading ->
             refreshBtn.text = if (loading) "⏳ 加载中..." else "🔄 刷新"
-            refreshBtn.isEnabled = !loading
         }
 
-        // 观察错误
+        // 错误
         viewModel.errorMessage.observe(this) { msg ->
             if (msg.isNotEmpty()) Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         }
 
-        // 观察连接事件
+        // 连接事件
         viewModel.newConnectionEvent.observe(this) { profile ->
             if (checkNativeLib()) startVncActivity(this, profile)
         }
 
-        // 点击设备
-        deviceList.setOnItemClickListener { _, _, position, _ ->
-            val device = adapter.getItem(position) ?: return@setOnItemClickListener
-            // 从设备名取 phone_id，code_id 暂时用空串（需从 API 存下来）
-            viewModel.connectDevice(device.name, "")
+        // 点击分组
+        groupList.setOnItemClickListener { _, _, position, _ ->
+            val selected = groupAdapter.getItem(position) ?: return@setOnItemClickListener
+            val groups = viewModel.groupsData
+
+            currentGroupDevices.clear()
+            when {
+                selected == "📁 全部设备" -> currentGroupDevices.addAll(allDevices)
+                selected == "📁 未分组" -> {
+                    val groupedIds = mutableSetOf<String>()
+                    for (g in groups) {
+                        val devs = g.optJSONArray("devices") ?: continue
+                        for (i in 0 until devs.length()) {
+                            groupedIds.add(devs.getJSONObject(i).getString("phone_id"))
+                        }
+                    }
+                    for (d in allDevices) {
+                        if (d.getString("phone_id") !in groupedIds) currentGroupDevices.add(d)
+                    }
+                }
+                else -> {
+                    // 自定义分组
+                    val groupName = selected.removePrefix("📁 ")
+                    for (g in groups) {
+                        if (g.optString("name") == groupName) {
+                            val devs = g.optJSONArray("devices") ?: continue
+                            for (i in 0 until devs.length()) {
+                                currentGroupDevices.add(devs.getJSONObject(i))
+                            }
+                            break
+                        }
+                    }
+                }
+            }
+            deviceAdapter.notifyDataSetChanged()
         }
 
-        // 刷新按钮
+        // 点击设备
+        deviceList.setOnItemClickListener { _, _, position, _ ->
+            val device = currentGroupDevices.getOrNull(position) ?: return@setOnItemClickListener
+            val phoneId = device.optString("phone_id", device.optString("name", ""))
+            viewModel.connectDevice(phoneId, device.optString("code_id", ""))
+        }
+
         refreshBtn.setOnClickListener { viewModel.fetchDevices() }
 
-        // 退出登录
         logoutBtn.setOnClickListener {
             refreshJob?.cancel()
             finish()
         }
 
-        // 首次加载
         viewModel.fetchDevices()
-
-        // 8 秒自动刷新
         startAutoRefresh()
     }
 
@@ -107,7 +157,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun checkNativeLib(): Boolean {
         return runCatching { VncClient.loadLibrary() }.onFailure {
-            MsgDialog.show(supportFragmentManager, "错误", "缺少原生库，请安装正确版本的 APK")
+            MsgDialog.show(supportFragmentManager, "错误", "缺少原生库")
         }.isSuccess
     }
 }
