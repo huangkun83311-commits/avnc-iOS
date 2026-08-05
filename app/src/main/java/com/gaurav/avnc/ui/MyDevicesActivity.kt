@@ -39,7 +39,7 @@ class MyDevicesActivity : AppCompatActivity() {
 
         deviceList.setOnItemClickListener { _, _, position, _ ->
             val device = viewModel.myDeviceList.value?.getOrNull(position) ?: return@setOnItemClickListener
-            viewModel.connectMyDevice(device.name)
+            viewModel.connectMyDevice(device.name, device.host)
         }
 
         viewModel.newConnectionEvent.observe(this) { profile ->
