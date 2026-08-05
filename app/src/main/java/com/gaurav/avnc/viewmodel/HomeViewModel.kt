@@ -146,7 +146,8 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
                     val list = mutableListOf<ServerProfile>()
                     for (i in 0 until arr.length()) {
                         val d = arr.getJSONObject(i)
-                        list.add(ServerProfile(name = d.getString("phone_id"), host = "", port = 5900))
+                        val codeId = d.optString("code_id", "")
+                        list.add(ServerProfile(name = d.getString("phone_id"), host = codeId, port = 5900))
                     }
                     myDeviceList.postValue(list)
                 } else {
@@ -163,7 +164,7 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
         }
     }
 
-    fun connectMyDevice(phoneId: String) {
+    fun connectMyDevice(phoneId: String, codeId: String) {
         launchIO {
             var conn: HttpURLConnection? = null
             try {
@@ -173,7 +174,7 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
                 conn.connectTimeout = 10000
                 conn.readTimeout = 10000
                 conn.doOutput = true
-                val body = "{\"phone_id\":\"$phoneId\",\"code_id\":\"\",\"user_ip\":\"\"}"
+                val body = "{\"phone_id\":\"$phoneId\",\"code_id\":\"$codeId\",\"user_ip\":\"\"}"
                 conn.outputStream.write(body.toByteArray())
 
                 val respText = if (conn.responseCode in 200..299) {
