@@ -142,6 +142,19 @@ class MyDevicesActivity : AppCompatActivity() {
         }
 
         viewModel.fetchMyDevices()
+
+        // 8秒自动刷新
+        val refreshHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        val refreshRunnable = object : Runnable {
+            override fun run() {
+                if (!isFinishing) {
+                    viewModel.fetchMyDevices()
+                    refreshHandler.postDelayed(this, 8000)
+                }
+            }
+        }
+        refreshHandler.postDelayed(refreshRunnable, 8000)
+        
     }
 
     private fun filterDevices() {
