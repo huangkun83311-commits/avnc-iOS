@@ -25,7 +25,14 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="4dp"
-            android:text="🔄 刷新" />
+            android:text="🔄" />
+
+        <Button
+            android:id="@+id/add_group_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:text="➕分组" />
 
         <Button
             android:id="@+id/logout_btn"
@@ -34,21 +41,39 @@
             android:text="退出" />
     </LinearLayout>
 
-    <ListView
-        android:id="@+id/device_list"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:layout_marginTop="8dp"
-        android:divider="#EEE"
-        android:dividerHeight="1dp" />
+        android:baselineAligned="false"
+        android:orientation="horizontal">
+
+        <ListView
+            android:id="@+id/group_list"
+            android:layout_width="130dp"
+            android:layout_height="match_parent"
+            android:background="#F5F5F5"
+            android:divider="#DDD"
+            android:dividerHeight="1dp"
+            android:padding="4dp" />
+
+        <ListView
+            android:id="@+id/device_list"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:divider="#EEE"
+            android:dividerHeight="1dp"
+            android:padding="4dp" />
+    </LinearLayout>
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center"
         android:padding="6dp"
-        android:text="💡 点击设备开始远程控制"
+        android:text="💡 长按分组可重命名/删除 | 长按设备可移动到分组"
         android:textColor="#888"
         android:textSize="12sp" />
 </LinearLayout>
