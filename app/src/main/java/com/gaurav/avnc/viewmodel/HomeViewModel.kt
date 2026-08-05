@@ -224,7 +224,7 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
                     val list = mutableListOf<JSONObject>()
                     for (i in 0 until arr.length()) list.add(arr.getJSONObject(i))
                     myGroupsData = list
-                    myGroupList.postValue(list)
+                    launchMain { myGroupList.postValue(list) }
                 }
             } catch (_: Exception) {}
         }
