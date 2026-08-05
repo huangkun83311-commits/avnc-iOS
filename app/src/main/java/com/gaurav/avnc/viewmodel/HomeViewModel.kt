@@ -114,6 +114,9 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
     val myIsLoading = MutableLiveData(false)
     val myErrorMessage = MutableLiveData<String>()
 
+    val myGroupList = MutableLiveData<List<JSONObject>>()
+    var myGroupsData = mutableListOf<JSONObject>()
+
     fun fetchMyDevices() {
         myIsLoading.value = true
         launchIO {
@@ -150,6 +153,7 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
                         list.add(ServerProfile(name = d.getString("phone_id"), host = codeId, port = 5900))
                     }
                     myDeviceList.postValue(list)
+                    fetchMyGroups()
                 } else {
                     myErrorMessage.postValue(json.optString("message", "获取设备列表失败"))
                 }
@@ -204,6 +208,87 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
             } finally {
                 conn?.disconnect()
             }
+        }
+    }
+
+    fun fetchMyGroups() {
+        if (isAdmin) return
+        launchIO {
+            try {
+                val conn = java.net.URL("$API_BASE/api/my/groups").openConnection() as HttpURLConnection
+                conn.setRequestProperty("Authorization", "Bearer $token")
+                val resp = conn.inputStream.bufferedReader().readText()
+                val json = JSONObject(resp)
+                if (json.getBoolean("success")) {
+                    val arr = json.getJSONArray("groups")
+                    val list = mutableListOf<JSONObject>()
+                    for (i in 0 until arr.length()) list.add(arr.getJSONObject(i))
+                    myGroupsData = list
+                    myGroupList.postValue(list)
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun createMyGroup(name: String) {
+        launchIO {
+            try {
+                val conn = java.net.URL("$API_BASE/api/my/groups").openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Authorization", "Bearer $token")
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.doOutput = true
+                conn.outputStream.write("{\"group_name\":\"$name\"}".toByteArray())
+                val json = JSONObject(conn.inputStream.bufferedReader().readText())
+                if (json.getBoolean("success")) fetchMyGroups()
+                else myErrorMessage.postValue(json.optString("message", "创建失败"))
+            } catch (e: Exception) { myErrorMessage.postValue(e.message ?: "创建失败") }
+        }
+    }
+
+    fun renameMyGroup(groupId: Int, newName: String) {
+        launchIO {
+            try {
+                val conn = java.net.URL("$API_BASE/api/my/groups/$groupId/rename").openConnection() as HttpURLConnection
+                conn.requestMethod = "PUT"
+                conn.setRequestProperty("Authorization", "Bearer $token")
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.doOutput = true
+                conn.outputStream.write("{\"group_name\":\"$newName\"}".toByteArray())
+                val json = JSONObject(conn.inputStream.bufferedReader().readText())
+                if (json.getBoolean("success")) fetchMyGroups()
+                else myErrorMessage.postValue(json.optString("message", "重命名失败"))
+            } catch (e: Exception) { myErrorMessage.postValue(e.message ?: "重命名失败") }
+        }
+    }
+
+    fun deleteMyGroup(groupId: Int) {
+        launchIO {
+            try {
+                val conn = java.net.URL("$API_BASE/api/my/groups/$groupId").openConnection() as HttpURLConnection
+                conn.requestMethod = "DELETE"
+                conn.setRequestProperty("Authorization", "Bearer $token")
+                val json = JSONObject(conn.inputStream.bufferedReader().readText())
+                if (json.getBoolean("success")) fetchMyGroups()
+                else myErrorMessage.postValue(json.optString("message", "删除失败"))
+            } catch (e: Exception) { myErrorMessage.postValue(e.message ?: "删除失败") }
+        }
+    }
+
+    fun moveDeviceToMyGroup(phoneId: String, groupId: Int?) {
+        launchIO {
+            try {
+                val conn = java.net.URL("$API_BASE/api/my/devices/move").openConnection() as HttpURLConnection
+                conn.requestMethod = "PUT"
+                conn.setRequestProperty("Authorization", "Bearer $token")
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.doOutput = true
+                val body = "{\"phone_id\":\"$phoneId\",\"group_id\":${groupId ?: "null"}}"
+                conn.outputStream.write(body.toByteArray())
+                val json = JSONObject(conn.inputStream.bufferedReader().readText())
+                if (json.getBoolean("success")) { fetchMyDevices(); fetchMyGroups() }
+                else myErrorMessage.postValue(json.optString("message", "移动失败"))
+            } catch (e: Exception) { myErrorMessage.postValue(e.message ?: "移动失败") }
         }
     }
 }
