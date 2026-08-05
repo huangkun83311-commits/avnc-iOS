@@ -208,4 +208,27 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
             }
         }
     }
+    fun connectMyDevice(phoneId: String) {
+    launchMain {
+        try {
+            val conn = java.net.URL("$API_BASE/api/validate").openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.outputStream.write("{\"phone_id\":\"$phoneId\",\"code_id\":\"\",\"user_ip\":\"\"}".toByteArray())
+            val json = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+            if (json.getBoolean("success")) {
+                newConnectionEvent.fire(ServerProfile(
+                    name = phoneId,
+                    host = json.getString("host"),
+                    port = json.getInt("port")
+                ))
+            } else {
+                myErrorMessage.postValue(json.optString("message", "验证失败"))
+            }
+        } catch (e: Exception) {
+            myErrorMessage.postValue("连接失败: ${e.message}")
+        }
+    }
+
 }
