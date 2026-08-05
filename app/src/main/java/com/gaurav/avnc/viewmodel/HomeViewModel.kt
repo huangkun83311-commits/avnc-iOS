@@ -118,7 +118,7 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
 
     fun fetchMyDevices() {
         myIsLoading.value = true
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelCoroutineScope.launch(Dispatchers.IO) {
             var conn: HttpURLConnection? = null
             try {
                 val url = if (isAdmin) "$API_BASE/api/admin/vnc_devices"
@@ -166,7 +166,7 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
     }
 
     fun connectMyDevice(phoneId: String) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelCoroutineScope.launch(Dispatchers.IO) {
             var conn: HttpURLConnection? = null
             try {
                 conn = URL("$API_BASE/api/validate").openConnection() as HttpURLConnection
@@ -186,8 +186,7 @@ class HomeViewModel(app: Application) : BaseViewModel(app) {
 
                 val json = JSONObject(respText)
                 if (json.getBoolean("success")) {
-                    // LiveEvent.fire 必须主线程
-                    viewModelScope.launch(Dispatchers.Main) {
+                    viewModelCoroutineScope.launch(Dispatchers.Main) {
                         newConnectionEvent.fire(
                             ServerProfile(
                                 name = phoneId,
